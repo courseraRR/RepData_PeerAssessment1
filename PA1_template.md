@@ -10,9 +10,8 @@ This documents describes the work undertaken to answer the follow questions:
 
 We begin by loading  and preprocessing the data. Ourdata will consist of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day. This data is [freely available as a zip file](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip).
 
-Do we want to convert the date field to a Date class????
 
-# Section 1: Loading and preprocessing the data
+# Section 1: Loading and Preprocessing the Data
 
 We begin by unzipping the zip file which contains the activity data
 
@@ -255,7 +254,10 @@ Thus the precentage of NAs present in the **steps** column is 13.1148%.
 
 ## Subsection 4.2: A Strategy for filling The Missing NA's
 
-### Subsectionsection 4.2.1 Distribution of Missing Values
+We divide this section into parts, the first part an analysis to motivate our
+approach which is present in the second part
+
+### Part I: Prelimiary Analyisis of the Distribution of Missing Values
 
 Before imputing the NA's it is useful to ask how are these
 "NA's" distributed?
@@ -324,11 +326,18 @@ no.daily.intervals
 
 we see that if a day has any missing value, the all values for that day are missing. 
 
-### Subsubsection 4.2.2 A Strategy for Imputing Missing Values
+### PART II: The Strategy
+
 Clearly we can't impute a missing value by looking at it's neigbour,since that neighbor will almost always also be missing. 
 
-Now we saw earlier that the steps values varied dramatically across time of day, with a spike at 08:35. So obviously a using a constant value, such as a mean,  to imputing the all the values for entire day would be a poor choice. A better choice would be to include the time of day as a factor in our imputation. Since we already have computed the daily average activity, it is easy to use that as
-our approach, simply replace each missing value with the number of steps predicted by the average activity for that interval.
+Now we saw earlier that the steps values varied dramatically across time of day, with a spike at 08:35. So obviously a using a constant value, such as a mean,  to imputing the all the values for entire day would be a poor choice. 
+
+A better choice IS to include the time of day as a factor in our imputation. Since we already have computed the daily average activity, this is easy to implement:
+
+### OUR FINAL STRATEGY:
+### ***For each missing with a given interval, replace each missing value with a predicted value given  by the average activity for that interval.*** 
+We obtain this value from the **df.ave.activity** data frame previouly computed in section 3.3.
+
 
 ## Subsection 4.3 Creating the The Imputed Data Set
 
@@ -365,8 +374,7 @@ Next we repeat the exercises in section 2, but with the new imputed data set
 
 ```r
 require(plyr)
-df.inputed.daily.steps <- ddply(df.imputed[-3], "date", function(d) c(count = sum(d$steps, 
-    na.rm = T)))
+df.inputed.daily.steps <- ddply(df.imputed[-3], "date", function(d) c(count = sum(d$steps)))
 head(df.inputed.daily.steps)
 ```
 
@@ -390,7 +398,7 @@ barplot(df.inputed.daily.steps$count, col = "lightblue")
 ![Daily Total Number of Steps(inputed](figure/unnamed-chunk-24.png) 
 
 
-And computing the mean and median for the imputed set we have
+And computing the mean and median for the inputed set we have
 
 To get the mean number of steps per day
 
@@ -418,7 +426,7 @@ median.inputed.daily.steps
 
 Clearly these values differ from those obtained in section 2.
 
-# Section 5 Differences in activity patterns between weekdays and weekends
+# Section 5 Differences in Activity Patterns Between Weekdays and Weekends
 
 ## Adding a New Factor to our DataSet
 To explore the differences in activity patterns between weekday and weekends
@@ -428,7 +436,7 @@ But first a helper function.
 ```r
 week.day.end <- function(x) {
     y <- weekdays(as.Date(x))
-    ifelse(y %in% c("Saturday", "Sunday"), "weekday", "weekend")
+    ifelse(y %in% c("Saturday", "Sunday"), "weekend", "weekday")
 }
 ```
 
@@ -440,14 +448,14 @@ head(df$wked)
 ```
 
 ```
-## [1] "weekend" "weekend" "weekend" "weekend" "weekend" "weekend"
+## [1] "weekday" "weekday" "weekday" "weekday" "weekday" "weekday"
 ```
 
 
 ## A Panel Plot Comparison
 
-We use ggplot 2 to do a visual comparion, but first we need to recompute the average activities 
-for for all intervals, and for the two factors
+We do visual comparion of the activity patterns between weekdays and weekends, but first we need to recompute the average activities 
+for  all intervals, togther with our new factors "weekend" and "weekday""
 
 
 ```r
@@ -456,11 +464,19 @@ df.ave.activity <- ddply(df[-2], c("interval", "wked"), function(d) c(average = 
 ```
 
 
+Next we plot using the we load the ggplot package, to get a visual comparison.
 
 ```r
 library(ggplot2)
 qplot(interval, average, data = df.ave.activity, facets = wked ~ ., geom = "line")
 ```
 
-![plot of chunk unnamed-chunk-30](figure/unnamed-chunk-30.png) 
+![Visual Comparion between Weekends and Weekdays](figure/unnamed-chunk-30.png) 
+
+
+Clearly, during the work week  there is a higher peak in the early morning (presumably people 
+walking from their car to their office). However during the week less activity is exhibited 
+for the rest of the day, presumably because the subjects were sitting behind a desk. 
+
+
 
