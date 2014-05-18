@@ -1,20 +1,262 @@
-# Reproducible Research: Peer Assessment 1
+
+Reproducible Research: Peer Assessment 1
+=============================================
+
+# Introduction
+This documents describes the work undertaken to answer the follow questions:
+* What is the mean total number of steps taken per day?
+* What is the average daily activity pattern?
+* What are the differences in activity patterns between weekdays and weekends?
+
+We begin by loading  and preprocessing the data. Ourdata will consist of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day. This data is [freely available as a zip file](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip).
+
+Do we want to convert the date field to a Date class????
+
+# Section 1: Loading and preprocessing the data
+
+We begin by unzipping the zip file which contains the activity data
+```{r}
+unzip("./activity.zip")
+```
+The zip file can be gotten easily by running
+```{r eval=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip") #NOT RUN!
+```
+
+Next we load in the activity data as a data frame and take a look at the first 5 lines
+```{r}
+read.csv("activity.csv", colClasses=c("numeric","character", "numeric"))->df
+head(df)
+```
+and also take a look at the last 5 lines
+```{r}
+tail(df)
+```
+
+Also a quick summary of the data.
+```{r}
+summary(df)
+```
+
+Note the only missing values occurs for **steps**.  
+
+We will return to the question of the how to deal with NA's later, but first
+we collect a little information on the existing data, ignoring missing values.
 
 
-## Loading and preprocessing the data
 
 
+# Section 2 The Mean Total Number of Steps taken per Day
 
-## What is mean total number of steps taken per day?
+In this section we address the question of ***what is mean total number of steps taken per day?***
+
+## Subsection 2.1 Plotting the total Number of Steps Each Day
+To get the step count for each day (this treats each NA as 0),
+we do
+```{r}
+require(plyr)
+df.daily.steps<-ddply(df[-3], "date", function(d)c(count=sum(d$steps, na.rm=T)))
+head(df.daily.steps)
+```
+
+Plotting the total number of steps per day we see
+```{r, fig.cap="Daily Total Number of Steps", fig.width=10, fig.height=5}
+barplot(df.daily.steps$count, col="lightblue")
+```
+
+## Subsection 2.2 Mean and Median
+
+To get the mean number of steps per day
+```{r}
+mean.daily.steps<-mean(df.daily.steps$count)
+mean.daily.steps
+```
+
+Alternatively we could get the mean by
+```{r}
+sum(df$steps, na.rm=T)/length( unique(df$date))
+```
+
+To get the median number of steps per day
+```{r}
+median.daily.steps<-median(df.daily.steps$count)
+median.daily.steps
+```
+
+# Section 3 The Average Daily Activity Pattern
+
+By ***average daily activity pattern***, we mean the pattern exhibited
+of the average activity for the same time interval over all days. This pattern
+is a 24-hour times series given in 5 minute intervals.
+The data set represents the time intervals using starting time having a 24 hour format, for example
+2430 is 11:30 pm.
+
+## Subsection 3.1 A Plotting the Activity Pattern
+Again use plyr we have
+```{r}
+df.ave.activity<-ddply(df[-2], "interval", function(d)c( average=mean(d$steps, na.rm=T) ))
+head(df.ave.activity)
+```
+
+and graphing 
+```{r, fig.cap="Activity Levels", fig.width=10, fig.height=6}
+with(df.ave.activity, { 
+    plot(interval, average, type="l")
+  })
+```
+
+## Subsection 3.3 The Interval with the Maximum Average Number of Steps
+Here we see that there is a spike in the morning sometime before 10:00 am. When the spike occurs
+is easily found to be
+```{r}
+peak<-df.ave.activity$interval[which(df.ave.activity$average==max(df.ave.activity$average))]
+peak<-sprintf("%04d",as.numeric(peak))
+peak<-paste(substr(peak,1,2),substr(peak,3,4),sep=":")
+peak
+```
+
+That is at `r peak`.  Which is shortly before the usual offices hours.
 
 
+# Section 4: Imputing missing values
 
-## What is the average daily activity pattern?
+## Subsection 4.1: The Amount of Missing Values (NA's)
+As we saw in the first section, steps is the only field containing missing values, and by direct
+calculation we see
+```{r}
+no.of.missing.values<-sum(is.na(df$steps))
+no.of.missing.values
+```
+that there are `r no.of.missing.values` many missing values. (argeeing with the summary in the first section)
+
+To get the percent is more revealing 
+```{r}
+percentNA<-100*sum(is.na(df$steps))/length(df$steps)
+percentNA
+```
+Thus the precentage of NAs present in the **steps** column is `r percentNA`%.
+
+## Subsection 4.2: A Strategy for filling The Missing NA's
+
+### Subsectionsection 4.2.1 Distribution of Missing Values
+
+Before imputing the NA's it is useful to ask how are these
+"NA's" distributed?
+
+Since the rows are in chronological order: 
+```{r}
+identical(order(df$date)==1:nrow)
+```
+
+plotting   missing values as a function of time is easy:
+```{r distribution of missing values, fig.cap="Chronology of Missing Values ", fig.width=10, fig.height=4}
+  plot(which(is.na(df$steps)))
+```
+
+From this it appears missing values seem to be clustered in groups.
+Plotting the daily number of missing values shows:
+```{r fig.cap="Total Daily Missing Values", fig.width=10, fig.height=4}
+df.missing.steps<-ddply(df[-3], "date", function(d)c(count=sum( is.na(d$steps) )))
+barplot(df.missing.steps$count, col="red")
+```
+It looks like there are only eight days where the values appear to be  missing.
+Examing those days we see
+```{r}
+df.missing.days<-subset(df.missing.steps, count>0)
+kable(df.missing.days)
+```
+Since 
+```{r}
+no.daily.intervals<-24*(5/60)
+no.daily.intervals
+```
+we see that if a day has any missing value, the all values for that day are missing. 
+
+### Subsubsection 4.2.2 A Strategy for Imputing Missing Values
+Clearly we can't impute a missing value by looking at it's neigbour,since that neighbor will almost always also be missing. 
+
+Now we saw earlier that the steps values varied dramatically across time of day, with a spike at `r peak`. So obviously a using a constant value, such as a mean,  to imputing the all the values for entire day would be a poor choice. A better choice would be to include the time of day as a factor in our imputation. Since we already have computed the daily average activity, it is easy to use that as
+our approach, simply replace each missing value with the number of steps predicted by the average activity for that interval.
+
+## Subsection 4.3 Creating the The Imputed Data Set
+
+First we create a helper function that returns the average step value given the for a given
+interval
+```{r}
+fn<-function(interval){
+  j<-which(df.ave.activity$interval==interval) #find the index on activity
+  df.ave.activity$average[j] #return the ave step for that activity
+}
+```
+Next we construct our new steps set
+```{r}
+i.steps<-sapply(1:nrow(df), function(i){ ifelse(is.na(df$steps[i]), fn(df$interval[i]), df$steps[i]) } )
+```
+And finally we form a new data frame with the imputed steps
+```{r}
+df.imputed<-df #copy
+df.imputed$steps<-i.steps
+```
 
 
+## Subsection 4.4
+Next we repeat the exercises in section 2, but with the new imputed data set
 
-## Imputing missing values
+```{r}
+require(plyr)
+df.inputed.daily.steps<-ddply(df.imputed[-3], "date", function(d)c(count=sum(d$steps, na.rm=T)))
+head(df.inputed.daily.steps)
+```
 
+Plotting the total number of steps per day we see
+```{r fig.cap="Daily Total Number of Steps(inputed", fig.width=10, fig.height=5}
+barplot(df.inputed.daily.steps$count, col="lightblue")
+```
 
+And computing the mean and median for the imputed set we have
 
-## Are there differences in activity patterns between weekdays and weekends?
+To get the mean number of steps per day
+```{r}
+mean.inputed.daily.steps<-mean(df.inputed.daily.steps$count)
+mean.inputed.daily.steps
+```
+
+To get the median number of steps per day
+```{r}
+median.inputed.daily.steps<-median(df.inputed.daily.steps$count)
+median.inputed.daily.steps
+```
+
+Clearly these values differ from those obtained in section 2.
+
+# Section 5 Differences in activity patterns between weekdays and weekends
+
+## Adding a New Factor to our DataSet
+To explore the differences in activity patterns between weekday and weekends
+we add an new factor as an indicator for whether the observation was a weekend or weekday.
+But first a helper function.
+```{r}
+week.day.end<-function(x){
+  y<-weekdays(as.Date(x))
+  ifelse(y %in% c("Saturday", "Sunday"), "weekday", "weekend")
+}
+```
+Next we add a new column to our data set
+```{r}
+df$wked<-sapply(df$date,week.day.end)
+head(df$wked)
+```
+
+## A Panel Plot Comparison
+
+We use ggplot 2 to do a visual comparion, but first we need to recompute the average activities 
+for for all intervals, and for the two factors
+
+```{r}
+df.ave.activity<-ddply(df[-2], c("interval","wked"), function(d)c( average=mean(d$steps, na.rm=T) ))
+```
+
+```{r}
+library(ggplot2)
+qplot(interval,average, data=df.ave.activity,facets=wked~., geom="line")
+```
